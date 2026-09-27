@@ -1,0 +1,4 @@
+node_modules/
+review/*
+!review/final.mp4
+run.log
