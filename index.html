@@ -51,7 +51,7 @@ void main(){
  vec2 uv=(gl_FragCoord.xy-.5*R)/R.y;
  vec3 col=vec3(0);
  if(S<.5||S>4.5){ // noise field
-  vec3 q=vec3(uv*1.6,T*.05);
+  vec3 q=vec3(uv*X2,T*.05);
   float w=fbm(q+vec3(fbm(q*1.3+T*.04),fbm(q.yzx*1.1-T*.03),0.)*1.2);
   float rg=1.-abs(2.*fbm(q*2.+w)-1.);rg=pow(rg,6.);
   col=mix(vec3(.005,.01,.03),vec3(.06,.16,.3),w*w*1.8)*X1;
@@ -78,7 +78,7 @@ void main(){
    else{
     float ax=abs(q.x)>abs(q.y)&&abs(q.x)>abs(q.z)?p.x:abs(q.y)>abs(q.z)?p.y:p.z;
     float sg=smoothstep(.85,1.,sin(ax*2.5-T*7.+h1(floor(p/2.)*7.)*9.));
-    col+=vec3(1.,.5,.2)*sg*3.;
+    col+=K*sg*3.;
    }
    col=mix(col,vec3(.02,.03,.06),fog);col+=vec3(.2,.4,1.)*gl*.5;
   }else if(S<2.5){ // apollonian caves
@@ -102,6 +102,7 @@ void main(){
     float iris=smoothstep(.56,.53,ang),pu=smoothstep(X1+.02,X1-.01,ang);
     vec3 sk=vec3(.85,.8,.74)*(1.-smoothstep(.6,1.6,ang)*.35);sk=mix(sk,vec3(.6,.15,.1),smoothstep(.5,.85,fbm(n0*7.+3.))*.6*smoothstep(.55,1.,ang));
     col=mix(sk,ic,iris);col=mix(col,vec3(.005),pu);
+    col=mix(col,vec3(.13,.09,.08)*(dif*.8+.2),smoothstep(0.,.04,abs(n0.y)-(1.-X2)*1.05+.02));
     col*=(dif*.85+.15)*a;
     col+=vec3(1.)*pow(max(dot(reflect(rd,n),ld),0.),200.)*1.5+vec3(.8,.9,1.)*pow(max(dot(reflect(rd,n),normalize(vec3(-1,.8,-.5))),0.),120.)*.6;
     col+=fr*vec3(.3,.4,.6)*.5;
@@ -122,14 +123,14 @@ void main(){
 // ---------- post shader ----------
 const PS=`#version 300 es
 precision highp float;
-uniform vec2 R;uniform float T,G,A,F,Z,TA,TY,TS;uniform sampler2D X,Y;out vec4 O;
+uniform vec2 R;uniform float T,G,A,F,Z,TA,TY,TS,CA,PZ;uniform sampler2D X,Y,W;out vec4 O;
 float hs(vec2 p){return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453);}
 float h1(vec3 p){p=fract(p*.3183+.1);p*=17.;return fract(p.x*p.y*p.z*(p.x+p.y+p.z));}
 float nz(vec3 x){vec3 p=floor(x),f=fract(x);f=f*f*(3.-2.*f);
 return mix(mix(mix(h1(p),h1(p+vec3(1,0,0)),f.x),mix(h1(p+vec3(0,1,0)),h1(p+vec3(1,1,0)),f.x),f.y),mix(mix(h1(p+vec3(0,0,1)),h1(p+vec3(1,0,1)),f.x),mix(h1(p+vec3(0,1,1)),h1(p+vec3(1,1,1)),f.x),f.y),f.z);}
 float fbm(vec3 p){float a=.5,r=0.;for(int i=0;i<4;i++){r+=a*nz(p);p=p*2.03+1.7;a*=.5;}return r;}
 void main(){
- vec2 uv=gl_FragCoord.xy/R,d=(uv-.5)*A*.012;
+ vec2 uv=(gl_FragCoord.xy/R-.5)*PZ+.5,d=(uv-.5)*A*.012;
  vec3 c=vec3(texture(X,uv+d).r,texture(X,uv).g,texture(X,uv-d).b);
  vec3 b=vec3(0);
  for(int i=0;i<8;i++){vec2 o=vec2(cos(float(i)*.785),sin(float(i)*.785));b+=textureLod(X,uv+o*6./R,2.).rgb*.6+textureLod(X,uv+o*14./R,3.).rgb*.4;}
@@ -138,6 +139,7 @@ void main(){
  float v=1.-dot(uv-.5,uv-.5)*1.2;c*=v*v;
  c+=(hs(uv+fract(T))-.5)*.03;
  c=mix(c,vec3(1),Z);
+ if(CA>0.){vec2 cu=vec2(uv.x,uv.y*R.y/R.x+T*.012);float cd=texture(W,cu).r;float nn=fbm(vec3(uv*5.,T*.2));c+=vec3(.6,.75,1.)*cd*CA*smoothstep(.45,.75,nn);}
  if(TA>0.){vec2 u2=(gl_FragCoord.xy-.5*R)/R.y;vec2 tu=vec2(u2.x/TS+.5,(u2.y-TY)/TS*8.+.5);
   if(tu.x>0.&&tu.x<1.&&tu.y>0.&&tu.y<1.){float tx=texture(Y,tu).r;float nn=fbm(vec3(u2*6.,T*.3));float a=tx*smoothstep(nn-.12,nn+.12,TA*1.3-.15);c=mix(c,vec3(1.,.97,.9),a*.9);}}
  O=vec4(max(c*F,0.),1);
@@ -160,8 +162,12 @@ onresize=size;size();
 const tc=document.createElement('canvas');tc.width=1024;tc.height=128;const t2=tc.getContext('2d');let curTxt='';
 function setText(s,big){if(s===curTxt)return;curTxt=s;t2.clearRect(0,0,1024,128);t2.fillStyle='#fff';t2.textAlign='center';t2.textBaseline='middle';
  t2.font=(big?'200 80px':'300 40px')+' "Helvetica Neue",Helvetica,Arial,sans-serif';t2.letterSpacing=big?'24px':'8px';t2.fillText(s,512+ (big?12:4),68);
- g.activeTexture(g.TEXTURE1);g.bindTexture(g.TEXTURE_2D,tt);g.pixelStorei(g.UNPACK_FLIP_Y_WEBGL,1);g.texImage2D(g.TEXTURE_2D,0,g.LUMINANCE,g.LUMINANCE,g.UNSIGNED_BYTE,tc);
+ g.activeTexture(g.TEXTURE1);g.bindTexture(g.TEXTURE_2D,tt);g.texImage2D(g.TEXTURE_2D,0,g.LUMINANCE,g.LUMINANCE,g.UNSIGNED_BYTE,tc);
  g.texParameteri(g.TEXTURE_2D,g.TEXTURE_MIN_FILTER,g.LINEAR);g.texParameteri(g.TEXTURE_2D,g.TEXTURE_WRAP_S,g.CLAMP_TO_EDGE);g.texParameteri(g.TEXTURE_2D,g.TEXTURE_WRAP_T,g.CLAMP_TO_EDGE);}
+// code texture (the demo's own source)
+const cc=document.createElement('canvas');cc.width=1024;cc.height=1024;const c2=cc.getContext('2d'),ct=g.createTexture();
+{c2.fillStyle='#fff';c2.font='13px Menlo,monospace';const ls=document.scripts[0].text.split('\n').flatMap(l=>l.match(/.{1,118}/g)||['']);for(let i=0;i<64;i++)c2.fillText(ls[(i*7)%ls.length],8,14+i*16);
+ g.activeTexture(g.TEXTURE2);g.bindTexture(g.TEXTURE_2D,ct);g.pixelStorei(g.UNPACK_FLIP_Y_WEBGL,1);g.texImage2D(g.TEXTURE_2D,0,g.LUMINANCE,g.LUMINANCE,g.UNSIGNED_BYTE,cc);g.texParameteri(g.TEXTURE_2D,g.TEXTURE_MIN_FILTER,g.LINEAR);g.texParameteri(g.TEXTURE_2D,g.TEXTURE_WRAP_S,g.CLAMP_TO_EDGE);g.texParameteri(g.TEXTURE_2D,g.TEXTURE_WRAP_T,g.REPEAT);}
 // ---------- music ----------
 const BPM=124,SPB=60/BPM,BAR=SPB*4,BARS=46,DUR=BARS*BAR;
 const ac=new AudioContext(),SR=ac.sampleRate,NS=Math.ceil((DUR+3)*SR);
@@ -191,12 +197,12 @@ function compose(){
  for(let b=0;b<BARS;b++){
   const t0=b*BAR,ch=chord(b),root=ch[0];
   // pad
-  const pv=b<8?.13:b>=40?.14:.12,pc=b<8?.025+.01*b:b>=28&&b<40?.12:.07;
+  const pv=b<8?.1:b>=40?.13:.12,pc=b<8?.025+.01*b:b>=28&&b<40?.12:.07;
   for(let i=0;i<5;i++)note(WB,t0-.25,BAR+.5,pad(fq(KEY+ch[i]),BAR+.5,pc),pv*(b>=44?(46-b)/2:1),(i-2)*.3);
   // intro sub
-  if(b<8)note(DB,t0,BAR,(t=>Math.sin(6.283*fq(KEY-12+root)*t)*env(t,.3,9,1,.3,BAR)),.3);
+  if(b<8)note(DB,t0-.25,BAR+.5,(t=>Math.sin(6.283*fq(KEY-12+root)*t)*Math.max(0,Math.min(1,t/.5,(BAR+.5-t)/.5))),.24);
   // bells (intro & outro)
-  if((b>=1&&b<8)||b>=40){for(let k=0;k<2;k++){const n=ch[(b*3+k*2)%6];note(WB,t0+k*2*SPB+(k?SPB*.5:0),SPB*4,bell(fq(KEY+24+n)),.16*(b>=44?(46-b)/2:1),Math.sin(b+k)*.6,1.5);}}
+  if((b>=1&&b<8)||b>=40){for(let k=0;k<2;k++){const n=ch[(b*3+k*2)%6];note(WB,t0+k*2*SPB+(k?SPB*.5:0),SPB*4,bell(fq(KEY+24+n)),.14*(b>=44?(46-b)/2:1),Math.sin(b+k)*.6,1.5);}}
   for(let q=0;q<16;q++){
    const t=t0+q*SPB/4,beat=q/4;
    if(has(b,KICK)&&q%4==0)note(KB,t,.7,kick(),1);
@@ -222,7 +228,7 @@ function fx(){
   for(let i=0;i<NS;i++){
    const t=i/SR,bar=t/BAR,bt=(t/SPB)%1;
    const kOn=(bar>=8&&bar<24)||(bar>=28&&bar<40);
-   const sc=kOn?1-.55*Math.exp(-bt*SPB*9):1;
+   const sc=(kOn?1-.55*Math.exp(-bt*SPB*9):1)*(bar>=28&&bar<40?1.2:1);
    let w=W[i];
    // ping-pong delay (lead/arps share it)
    const dv=DO[di];DL[di]=w*.5+dv*.45;di=(di+1)%d1;
@@ -247,24 +253,25 @@ function frame(t){
  const bar=t/BAR,bt=(t/SPB)%1,bi=Math.floor(t/SPB);
  const kOn=(bar>=8&&bar<24)||(bar>=28&&bar<40);
  const B=kOn?Math.exp(-bt*SPB*7):0;
- let S=0,C=[0,0,0],L=[0,0,1],K=[.2,.8,1],X1=1,X2=0,X3=0,X4=0,X5=0,G=1,A=.5;
+ let S=0,C=[0,0,0],L=[0,0,1],K=[1,.5,.2],X1=1,X2=0,X3=0,X4=0,X5=0,G=1,A=.5;
  const path=z=>[Math.sin(z*.2)*1.5,0,z];
- if(bar<8){S=0;X1=sm(0,3,bar)*(1-.5*sm(7,8,bar));A=.3;}
+ if(bar<8){S=0;X1=sm(0,3,bar)*(1-.5*sm(7,8,bar));X2=2.-.6*sm(0,8,bar);A=.3;}
  else if(bar<16){S=1;const z=t*1.6;C=[1+.45*Math.sin(t*.5),1+.45*Math.cos(t*.37),z];L=[1+.6*Math.sin(t*.5+1),1+.4*Math.cos(t*.37+1),z+3];X4=Math.sin(t*.2)*.4;G=1.2;A=.4;}
  else if(bar<24){S=2;const z=(t-16*BAR)*1.5;C=path(z);C[0]+=Math.sin(t*.7)*.3;C[1]=Math.sin(t*.5)*.25;L=path(z+2);L[0]+=Math.sin(t*.31)*1.5;L[1]=Math.cos(t*.27)*.8;X1=1.1+.06*Math.sin(t*.2);X4=Math.sin(t*.25)*.15;G=.7;A=.5;}
- else if(bar<28){S=3;const a=(bar-24)*.45+.3,r=3.8-(bar-24)*.2;C=[Math.sin(a)*r,.6-.25*(bar-24),Math.cos(a)*r];L=[0,0,0];X1=.16+.03*Math.sin(t*.8)+sm(26,28,bar)*.15;X4=Math.sin(t*.3)*.04;G=1;A=.3+sm(26,28,bar)*1.5;}
+ else if(bar<28){S=3;const a=(bar-24)*.45+.3,r=3.8-(bar-24)*.2;C=[Math.sin(a)*r,.6-.25*(bar-24),Math.cos(a)*r];L=[0,0,0];X1=.16+.03*Math.sin(t*.8)+sm(26,28,bar)*.15;const bk=Math.max(0,1-Math.abs(bar-25.6)*12);X2=Math.max(bk,sm(27.4,27.95,bar));X4=Math.sin(t*.3)*.04;G=1;A=.3+sm(26,28,bar)*1.5;}
  else if(bar<40){
   const seg=bar<32?0:bar<34?1:bar<36?0:bar<37?2:bar<38?1:0;
   const sp=1+sm(38,40,bar)*.8;
   if(seg==0){S=4;const z=(t-28*BAR)*3.5*sp+Math.floor(bar/4)*7;C=path(z);C[1]=Math.sin(t*.9)*.3;C[0]+=Math.cos(t*.7)*.3;L=path(z+2.5);L[1]+=Math.sin(t*.6)*.4;X1=t*.5;X3=t*.25;X4=t*.35+(bi&1?1:-1)*B*.08;K=bar<32?[.2,.8,1]:bar<36?[1,.35,.75]:[1,.75,.3];G=.6+B*.4;A=.6+B;}
-  else if(seg==1){S=1;const z=t*4.5;C=[1+.45*Math.sin(t*.9),1+.45*Math.cos(t*.7),z];L=[1+.6*Math.sin(t*.9+1),1+.4*Math.cos(t*.7+1),z+3];X4=t*.6+(bi&1?1:-1)*B*.1;G=1.2;A=.5+B;}
+  else if(seg==1){S=1;K=bar<34?[1,.3,.6]:[.3,.9,1];const z=t*4.5;C=[1+.45*Math.sin(t*.9),1+.45*Math.cos(t*.7),z];L=[1+.6*Math.sin(t*.9+1),1+.4*Math.cos(t*.7+1),z+3];X4=t*.6+(bi&1?1:-1)*B*.1;G=1.2;A=.5+B;}
   else{S=2;const z=(t-36*BAR)*4;C=path(z);C[1]=Math.sin(t*.5)*.25;L=path(z+2);L[0]+=Math.sin(t*.9)*1.5;L[1]=Math.cos(t*.8)*.8;X1=1.1;X4=t*.5;G=.7;A=.5+B;}
  }
- else{S=5;X1=sm(46,40,bar)*.9;A=.3;}
+ else{S=5;X1=sm(46,40,bar)*.9;X2=1.4;A=.3;}
  // cuts flash
  let Z=0;for(const cb of[8,16,24,28,32,34,36,37,38])Z+=Math.exp(-Math.max(0,bar-cb)*BAR*6)*(bar>=cb?1:0)*.6;
  if(bar>=28&&bar<40)Z+=B*.05;
  const F=sm(0,1,bar)*(1-sm(45,46,bar));
+ const CA=bar<8?.35*sm(1,4,bar)*(1-sm(6,8,bar)):bar>=40?.8*sm(40,42,bar)*(1-sm(44.5,46,bar)):0,PZ=bar>=28&&bar<40?1-B*.03:1;
  // text
  let TA=0,TY=-.3,TS=.7,txt='';
  for(const[a,z,s,big]of CAP)if(bar>=a-1&&bar<z+1){txt=s;TA=sm(a-1,a,bar)*(1-sm(z,z+1,bar));if(big){TY=0;TS=.8;}}
@@ -278,12 +285,12 @@ function frame(t){
  g.activeTexture(g.TEXTURE0);g.bindTexture(g.TEXTURE_2D,ft);g.generateMipmap(g.TEXTURE_2D);g.activeTexture(g.TEXTURE1);g.bindTexture(g.TEXTURE_2D,tt);
  g.bindFramebuffer(g.FRAMEBUFFER,null);g.viewport(0,0,W,H);g.useProgram(P2);
  g.uniform2f(U(P2,'R'),W,H);g.uniform1f(U(P2,'T'),t);g.uniform1f(U(P2,'G'),G);g.uniform1f(U(P2,'A'),A);g.uniform1f(U(P2,'F'),F);g.uniform1f(U(P2,'Z'),Math.min(1,Z));
- g.uniform1i(U(P2,'X'),0);g.uniform1i(U(P2,'Y'),1);g.uniform1f(U(P2,'TA'),TA);g.uniform1f(U(P2,'TY'),TY);g.uniform1f(U(P2,'TS'),TS);g.drawArrays(g.TRIANGLES,0,3);
+ g.uniform1i(U(P2,'X'),0);g.uniform1i(U(P2,'Y'),1);g.uniform1i(U(P2,'W'),2);g.uniform1f(U(P2,'CA'),CA);g.uniform1f(U(P2,'PZ'),PZ);g.uniform1f(U(P2,'TA'),TA);g.uniform1f(U(P2,'TY'),TY);g.uniform1f(U(P2,'TS'),TS);g.drawArrays(g.TRIANGLES,0,3);
 }
 // ---------- start ----------
 const o=document.getElementById('o');
 let st=-1,want=0;
 function start(){if(st>=0)return;if(!buf){want=1;return;}o.style.display='none';ac.resume();const s=ac.createBufferSource();s.buffer=buf;if(!Q.get('mute'))s.connect(ac.destination);s.start(0,T0);st=ac.currentTime-T0;
- (function loop(){const t=ac.currentTime-st;if(t<DUR+1){frame(t);requestAnimationFrame(loop);}})();}
+ (function loop(){const t=ac.currentTime-st;if(t<DUR+1){frame(t);requestAnimationFrame(loop);}else{st=-1;o.textContent='REPLAY';o.style.display='flex';}})();}
 setTimeout(()=>{render();o.textContent='CLICK TO START';onclick=start;onkeydown=e=>{if(e.key==' ')start();};if(want)start();},30);
 </script>
