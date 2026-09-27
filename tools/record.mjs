@@ -54,23 +54,23 @@ const ctx = await browser.newContext({
 });
 const page = await ctx.newPage();
 // CDP screencast: every frame carries a wall-clock timestamp, so audio aligns exactly.
-const cdp = await ctx.newCDPSession(page); const frames = []; let nf = 0;
+const cdp = await ctx.newCDPSession(page); const frames = []; let nf = 0; const pend = [];
 cdp.on('Page.screencastFrame', ({ data, metadata, sessionId }) => {
   const f = path.join(tmp, `s${String(nf++).padStart(6, '0')}.jpg`);
-  fs.writeFileSync(f, Buffer.from(data, 'base64')); frames.push([f, metadata.timestamp]);
   cdp.send('Page.screencastFrameAck', { sessionId }).catch(() => {});
+  pend.push(fs.promises.writeFile(f, Buffer.from(data, 'base64'))); frames.push([f, metadata.timestamp]);
 });
 const errors = [];
 page.on('console', m => m.type() === 'error' && errors.push(m.text()));
 page.on('pageerror', e => errors.push(String(e)));
 await page.addInitScript(tap);
 await page.goto('file://' + path.resolve(file));
-const renderer = await page.evaluate(() => {
+const renderer = process.env.NOREND ? 'skip' : await page.evaluate(() => {
   const g = document.createElement('canvas').getContext('webgl');
   const d = g && g.getExtension('WEBGL_debug_renderer_info');
   return g ? (d ? g.getParameter(d.UNMASKED_RENDERER_WEBGL) : 'webgl') : 'none';
 });
-await cdp.send('Page.startScreencast', { format: 'jpeg', quality: 88, everyNthFrame: 1 });
+if (!process.env.NOSC) await cdp.send('Page.startScreencast', { format: 'jpeg', quality: 88, everyNthFrame: 1 });
 await page.waitForTimeout(500);
 await page.mouse.click(640, 360); // satisfy any click-to-start overlay
 await page.keyboard.press('Space').catch(() => {});
@@ -87,11 +87,12 @@ const audio = await page.evaluate(() => {
   return { b64: btoa(s), t0: r.t0, sr: r.sr };
 });
 const ft = await page.evaluate(() => window.__ft.slice(30).sort((a, b) => a - b));
-await cdp.send('Page.stopScreencast').catch(() => {});
+await cdp.send('Page.stopScreencast').catch(() => {}); await Promise.all(pend);
 await ctx.close(); await browser.close();
 
 const mp4 = path.join(out, `${tag}.mp4`);
-const T0 = frames[0][1], list = path.join(tmp, 'frames.txt');
+if (process.env.NOSC) { const pct = p => ft.length ? +ft[Math.floor(ft.length * p)].toFixed(2) : null; console.log(JSON.stringify({ frames: ft.length, ft_p50: pct(.5), ft_p95: pct(.95) })); process.exit(0); }
+const T0 = frames[0]?.[1] ?? 0, list = path.join(tmp, 'frames.txt');
 fs.writeFileSync(list, frames.map(([f, t], i) => `file '${f}'\nduration ${((frames[i + 1]?.[1] ?? t + 1 / 60) - t).toFixed(4)}`).join('\n') + `\nfile '${frames.at(-1)[0]}'\n`);
 const ff = ['-y', '-loglevel', 'error', '-f', 'concat', '-safe', '0', '-i', list];
 if (audio) {
@@ -100,8 +101,8 @@ if (audio) {
   ff.push('-f', 's16le', '-ar', String(audio.sr), '-ac', '2', '-i', apath, '-map', '0:v', '-map', '1:a', '-af', off >= 0 ? `adelay=${Math.round(off * 1000)}:all=1` : `atrim=start=${-off},asetpts=PTS-STARTPTS`, '-c:a', 'aac', '-b:a', '192k');
 }
 ff.push('-vf', 'fps=60,scale=1280:720', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', '-crf', '20', mp4);
-execFileSync('ffmpeg', ff);
-execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-i', mp4, '-vf', 'fps=1,scale=960:-2', '-q:v', '4', path.join(stills, 'f%03d.jpg')]);
+try { execFileSync('ffmpeg', ff);
+execFileSync('ffmpeg', ['-y', '-loglevel', 'error', '-i', mp4, '-vf', 'fps=1,scale=960:-2', '-q:v', '4', path.join(stills, 'f%03d.jpg')]); } catch (e) { console.error('ffmpeg failed', e.message); }
 if (!process.env.KEEP) fs.rmSync(tmp, { recursive: true, force: true });
 
 const pct = p => ft.length ? +ft[Math.floor(ft.length * p)].toFixed(2) : null;
