@@ -156,7 +156,8 @@ function size(){const dp=Math.min(devicePixelRatio,1.5)*RS;W=c.width=innerWidth*
  W2=W*.75|0;H2=H*.75|0;g.bindTexture(g.TEXTURE_2D,ft);g.texImage2D(g.TEXTURE_2D,0,g.RGBA16F,W2,H2,0,g.RGBA,g.HALF_FLOAT,null);
  g.texParameteri(g.TEXTURE_2D,g.TEXTURE_MIN_FILTER,g.LINEAR_MIPMAP_LINEAR);g.texParameteri(g.TEXTURE_2D,g.TEXTURE_MAG_FILTER,g.LINEAR);
  g.texParameteri(g.TEXTURE_2D,g.TEXTURE_WRAP_S,g.CLAMP_TO_EDGE);g.texParameteri(g.TEXTURE_2D,g.TEXTURE_WRAP_T,g.CLAMP_TO_EDGE);
- g.bindFramebuffer(g.FRAMEBUFFER,fb);g.framebufferTexture2D(g.FRAMEBUFFER,g.COLOR_ATTACHMENT0,g.TEXTURE_2D,ft,0);}
+ g.bindFramebuffer(g.FRAMEBUFFER,fb);g.framebufferTexture2D(g.FRAMEBUFFER,g.COLOR_ATTACHMENT0,g.TEXTURE_2D,ft,0);
+ if(g.checkFramebufferStatus(g.FRAMEBUFFER)!=g.FRAMEBUFFER_COMPLETE)g.texImage2D(g.TEXTURE_2D,0,g.RGBA,W2,H2,0,g.RGBA,g.UNSIGNED_BYTE,null);}
 onresize=size;size();
 // text texture
 const tc=document.createElement('canvas');tc.width=1024;tc.height=128;const t2=tc.getContext('2d');let curTxt='';
@@ -239,7 +240,7 @@ function fx(){
    rv*=.25;
    for(let k=0;k<2;k++){const b=ab[k],n=b.length,j=i%n;const y=b[j];b[j]=rv+y*.5;rv=y-rv*.5;}
    const v=K[i]+sc*(D[i]+w+rv*.5);
-   O[i]=Math.tanh(v*1.1);
+   O[i]=Math.tanh(v*1.1)*.92;
   }
  }
  return out;
@@ -275,7 +276,7 @@ function frame(t){
  // text
  let TA=0,TY=-.3,TS=.7,txt='';
  for(const[a,z,s,big]of CAP)if(bar>=a-1&&bar<z+1){txt=s;TA=sm(a-1,a,bar)*(1-sm(z,z+1,bar));if(big){TY=0;TS=.8;}}
- if(txt)setText(txt,txt=='FABLE');
+ if(txt)setText(txt,txt=='FABLE');TS=Math.min(TS,W/H*.9);
  // draw scene
  g.bindFramebuffer(g.FRAMEBUFFER,fb);g.viewport(0,0,W2,H2);g.useProgram(P1);
  g.uniform2f(U(P1,'R'),W2,H2);g.uniform1f(U(P1,'T'),t);g.uniform1f(U(P1,'B'),B);g.uniform1f(U(P1,'S'),S);

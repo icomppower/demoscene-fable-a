@@ -1,4 +1,7 @@
 node_modules/
 review/*
-!review/final.mp4
+
 run.log
+run.start
+run.end
+run.err
